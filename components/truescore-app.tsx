@@ -8,8 +8,8 @@ import { TipButton } from "./tip-button"
 import { DailyCheckin } from "./daily-checkin"
 import { ThemeToggle } from "./theme-toggle"
 import { AppFooter } from "./app-footer"
-import { ConnectWalletButton } from "./connect-wallet-button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Wallet } from "lucide-react"
 import sdk, { type FrameContext } from "@farcaster/frame-sdk"
 
 export interface UserData {
@@ -31,6 +31,7 @@ export function TrueScoreApp() {
   const [isSDKLoaded, setIsSDKLoaded] = useState(false)
   const [context, setContext] = useState<FrameContext | null>(null)
   const [theme, setTheme] = useState<"light" | "dark">("light")
+  const [walletAddress, setWalletAddress] = useState<string | null>(null)
 
   const fetchUserData = useCallback(async (fid: number) => {
     try {
@@ -39,6 +40,9 @@ export function TrueScoreApp() {
       if (!response.ok) throw new Error("Failed to fetch user data")
       const data = await response.json()
       setUserData(data)
+      if (data.verifiedAddresses && data.verifiedAddresses.length > 0) {
+        setWalletAddress(data.verifiedAddresses[0])
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred")
     } finally {
@@ -127,7 +131,14 @@ export function TrueScoreApp() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <ConnectWalletButton />
+              {walletAddress && (
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
+                  <Wallet className="h-4 w-4 text-indigo-500" />
+                  <span className="text-sm font-medium text-indigo-600 dark:text-indigo-400">
+                    {`${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`}
+                  </span>
+                </div>
+              )}
               <ThemeToggle theme={theme} onToggle={toggleTheme} />
             </div>
           </div>
@@ -164,7 +175,7 @@ export function TrueScoreApp() {
           {/* Tip & Check-in */}
           <div className="grid grid-cols-2 gap-3">
             <TipButton recipientFid={userData.fid} />
-            <DailyCheckin />
+            <DailyCheckin walletAddress={walletAddress} username={userData.username} score={userData.score} />
           </div>
 
           {/* Footer */}
