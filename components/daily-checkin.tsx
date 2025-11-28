@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
-import { CalendarCheck, Loader2, Check, ExternalLink, Zap, Share2, X } from "lucide-react"
+import { CalendarCheck, Loader2, Check, ExternalLink, Zap, Share2 } from "lucide-react"
 import sdk from "@farcaster/frame-sdk"
 
 const NETWORKS = [
@@ -52,6 +52,7 @@ export function DailyCheckin({ walletAddress, username, score }: DailyCheckinPro
 
   const handleCheckin = async () => {
     if (!walletAddress || !selectedNetwork) {
+      console.log("[v0] No wallet address or network:", { walletAddress, selectedNetwork })
       setStatus("error")
       setTimeout(() => setStatus("idle"), 3000)
       return
@@ -61,22 +62,27 @@ export function DailyCheckin({ walletAddress, username, score }: DailyCheckinPro
     setStatus("loading")
 
     try {
-      // Use Farcaster SDK's ethProvider for transactions
-      const provider = await sdk.wallet.ethProvider
+      console.log("[v0] Getting ethProvider from SDK...")
+      const provider = sdk.wallet.ethProvider
 
-      // Request to switch chain if needed
+      if (!provider) {
+        console.log("[v0] No provider available")
+        throw new Error("No wallet provider available")
+      }
+
+      console.log("[v0] Switching to chain:", selectedNetwork.chainId)
+      // Try to switch chain
       try {
         await provider.request({
           method: "wallet_switchEthereumChain",
           params: [{ chainId: `0x${selectedNetwork.chainId.toString(16)}` }],
         })
       } catch (switchError: any) {
-        // Chain might not be added, continue anyway
-        console.log("Chain switch:", switchError.message)
+        console.log("[v0] Chain switch note:", switchError?.message)
       }
 
-      // Send the check-in transaction
-      const txHash = await provider.request({
+      console.log("[v0] Sending check-in transaction...")
+      const hash = await provider.request({
         method: "eth_sendTransaction",
         params: [
           {
@@ -88,17 +94,18 @@ export function DailyCheckin({ walletAddress, username, score }: DailyCheckinPro
         ],
       })
 
-      if (txHash) {
-        setTxHash(txHash as string)
+      console.log("[v0] Transaction hash:", hash)
+
+      if (hash) {
+        setTxHash(hash as string)
         setLastCheckin(new Date().toLocaleDateString())
         setStatus("success")
         setShowShareDialog(true)
       } else {
-        setStatus("error")
-        setTimeout(() => setStatus("idle"), 3000)
+        throw new Error("No transaction hash returned")
       }
-    } catch (error) {
-      console.error("Transaction failed:", error)
+    } catch (error: any) {
+      console.error("[v0] Transaction failed:", error?.message || error)
       setStatus("error")
       setTimeout(() => setStatus("idle"), 3000)
     }
@@ -113,7 +120,7 @@ export function DailyCheckin({ walletAddress, username, score }: DailyCheckinPro
   const getButtonText = () => {
     if (!walletAddress) return "No Wallet"
     if (status === "switching") return "Switching..."
-    if (status === "loading") return "Sending..."
+    if (status === "loading") return "Confirm in Wallet..."
     if (status === "success") return "Done!"
     return "Check In"
   }
@@ -123,17 +130,26 @@ export function DailyCheckin({ walletAddress, username, score }: DailyCheckinPro
       const shareText = `I just checked in on TrustScore! My score is ${score || 0}. Check yours at`
       const frameUrl = process.env.NEXT_PUBLIC_URL || "https://trust-score.vercel.app"
 
-      await sdk.actions.openUrl(
-        `https://warpcast.com/~/compose?text=${encodeURIComponent(shareText)}&embeds[]=${encodeURIComponent(frameUrl)}`,
-      )
+      try {
+        await sdk.actions.composeCast({
+          text: shareText,
+          embeds: [frameUrl],
+        })
+      } catch {
+        // Fallback to Warpcast URL if composeCast not available
+        await sdk.actions.openUrl(
+          `https://warpcast.com/~/compose?text=${encodeURIComponent(shareText)}&embeds[]=${encodeURIComponent(frameUrl)}`,
+        )
+      }
       setShowShareDialog(false)
     } catch (error) {
-      console.error("Share failed:", error)
+      console.error("[v0] Share failed:", error)
     }
   }
 
   const handleCloseDialog = () => {
     setShowShareDialog(false)
+    setStatus("idle")
   }
 
   return (
@@ -202,6 +218,7 @@ export function DailyCheckin({ walletAddress, username, score }: DailyCheckinPro
         </div>
       </Card>
 
+      {/* Share Dialog */}
       <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -219,7 +236,7 @@ export function DailyCheckin({ walletAddress, username, score }: DailyCheckinPro
               <div className="text-center space-y-2">
                 <p className="text-sm text-muted-foreground">Your TrustScore</p>
                 <p className="text-4xl font-bold text-emerald-500">{score || 0}</p>
-                <p className="text-xs text-muted-foreground">@{username}</p>
+                <p className="text-xs text-muted-foreground">@{username || "user"}</p>
               </div>
             </div>
 
@@ -235,17 +252,16 @@ export function DailyCheckin({ walletAddress, username, score }: DailyCheckinPro
               </a>
             )}
 
-            <div className="flex gap-3">
-              <Button variant="outline" className="flex-1 bg-transparent" onClick={handleCloseDialog}>
-                <X className="w-4 h-4 mr-2" />
-                Close
-              </Button>
+            <div className="flex flex-col gap-2">
               <Button
-                className="flex-1 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700"
+                className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700"
                 onClick={handleShare}
               >
                 <Share2 className="w-4 h-4 mr-2" />
                 Share on Warpcast
+              </Button>
+              <Button variant="ghost" className="w-full text-muted-foreground" onClick={handleCloseDialog}>
+                Maybe Later
               </Button>
             </div>
           </div>

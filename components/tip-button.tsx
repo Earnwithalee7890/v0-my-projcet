@@ -1,41 +1,50 @@
 "use client"
+
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Coins, Loader2, Sparkles, Copy, Check } from "lucide-react"
-import { useAccount, useConnect, useSendTransaction } from "wagmi"
-import { parseEther } from "viem"
+import sdk from "@farcaster/frame-sdk"
 
 const WALLET_ADDRESS = "0xBC74eA115f4f30Ce737F394a93701Abd1642d7D1" as const
 
-export function TipButton() {
+interface TipButtonProps {
+  walletAddress?: string | null
+}
+
+export function TipButton({ walletAddress }: TipButtonProps) {
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle")
   const [copied, setCopied] = useState(false)
-  const { isConnected } = useAccount()
-  const { connect, connectors } = useConnect()
-  const { sendTransactionAsync } = useSendTransaction()
 
   const handleTip = async () => {
-    if (!isConnected) {
-      try {
-        connect({ connector: connectors[0] })
-        return
-      } catch (err) {
-        console.error("Connection failed:", err)
-        setStatus("error")
-        setTimeout(() => setStatus("idle"), 3000)
-        return
-      }
+    if (!walletAddress) {
+      setStatus("error")
+      setTimeout(() => setStatus("idle"), 3000)
+      return
     }
 
     setStatus("loading")
     try {
-      await sendTransactionAsync({
-        to: WALLET_ADDRESS,
-        value: parseEther("0.001"),
+      const provider = await sdk.wallet.ethProvider
+
+      // Send 0.001 ETH tip
+      const txHash = await provider.request({
+        method: "eth_sendTransaction",
+        params: [
+          {
+            from: walletAddress,
+            to: WALLET_ADDRESS,
+            value: "0x38D7EA4C68000", // 0.001 ETH in hex
+          },
+        ],
       })
-      setStatus("success")
-      setTimeout(() => setStatus("idle"), 3000)
+
+      if (txHash) {
+        setStatus("success")
+        setTimeout(() => setStatus("idle"), 3000)
+      } else {
+        throw new Error("Transaction failed")
+      }
     } catch (error) {
       console.error("Tip failed:", error)
       setStatus("error")
@@ -74,7 +83,7 @@ export function TipButton() {
 
         <Button
           onClick={handleTip}
-          disabled={status === "loading"}
+          disabled={status === "loading" || !walletAddress}
           className={`w-full ${
             status === "success"
               ? "bg-green-500 hover:bg-green-600"
@@ -94,9 +103,7 @@ export function TipButton() {
               ? "Tip Sent!"
               : status === "error"
                 ? "Failed - Try Again"
-                : isConnected
-                  ? "Send Tip"
-                  : "Connect & Tip"}
+                : "Send Tip"}
         </Button>
       </div>
     </Card>

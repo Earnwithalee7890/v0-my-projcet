@@ -174,7 +174,7 @@ export function TrueScoreApp() {
 
           {/* Tip & Check-in */}
           <div className="grid grid-cols-2 gap-3">
-            <TipButton recipientFid={userData.fid} />
+            <TipButton walletAddress={walletAddress} />
             <DailyCheckin walletAddress={walletAddress} username={userData.username} score={userData.score} />
           </div>
 
